@@ -1,8 +1,8 @@
 [package]
-name = "my_psp34"
-version = "1.0.0"
+name = "dropspace_sale"
+version = "0.1.0"
 edition = "2021"
-authors = ["The best developer ever"]
+authors = ["Mihir Wadekar"]
 
 [dependencies]
 
@@ -16,7 +16,7 @@ openbrush = { tag = "4.0.0-beta", git = "https://github.com/Brushfam/openbrush-c
 
 
 [lib]
-name = "my_psp34"
+name = "dropspace_sale"
 path = "lib.rs"
 
 
