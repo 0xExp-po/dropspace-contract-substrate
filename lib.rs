@@ -105,26 +105,31 @@ pub mod dropspace_sale {
 			Ok(())
 		}
 
+		#[ink(message)]
 		pub fn set_base_uri(&mut self, uri: PreludeString) -> Result<(), PSP34Error> {
 			self.base_uri = uri;
 			Ok(())
 		}
 
+		#[ink(message)]
 		pub fn set_mint_per_tx(&mut self, mint_per_tx: u128) -> Result<(), PSP34Error> {
 			self.mint_per_tx = mint_per_tx;
 			Ok(())
 		}
 
+		#[ink(message)]
 		pub fn set_mint_price(&mut self, mint_price: u128) -> Result<(), PSP34Error> {
 			self.mint_price = mint_price;
 			Ok(())
 		}
 
+		#[ink(message)]
 		pub fn set_sale_time(&mut self, sale_time: u64) -> Result<(), PSP34Error> {
 			self.sale_time = sale_time;
 			Ok(())
 		}
 
+		#[ink(message)]
 		pub fn set_total_supply(&mut self, total_supply: u128) -> Result<(), PSP34Error> {
 			if total_supply < self.total_supply {
 				return Err(PSP34Error::Custom(String::from("DropspaceSale::set_total_supply: Total supply is lesser than current")));
