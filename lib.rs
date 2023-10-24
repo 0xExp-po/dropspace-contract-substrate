@@ -39,7 +39,7 @@ pub mod dropspace_sale {
 			mint_price: u128,
 			mint_fee: u128,
 			dev_wallet: Address,
-			sale_time: u128
+			sale_time: u64
 		) -> Self {
             let mut _instance = Self { 
 				current_supply: 0, 
@@ -49,7 +49,7 @@ pub mod dropspace_sale {
 				mint_price: mint_price,
 				mint_fee: mint_fee,
 				dev_wallet: Some(dev_wallet),
-				sale_time: u64::MAX,
+				sale_time: sale_time,
 				..Default::default() 
 			};
 			ownable::Internal::_init_with_owner(&mut _instance, Self::env().caller());
