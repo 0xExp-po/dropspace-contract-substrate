@@ -139,6 +139,17 @@ pub mod dropspace_sale {
 
 		#[ink(message)]
 		#[modifiers(only_owner)]
+		pub fn toggle_sale_active(&mut self) -> Result<(), PSP34Error> {
+			if self.sale_time() != 0 {
+				self.sale_time = 0;
+			} else {
+				self.sale_time = u64::MAX;
+			}
+			Ok(())
+		}
+
+		#[ink(message)]
+		#[modifiers(only_owner)]
 		pub fn set_supply_limit(&mut self, supply_limit: u128) -> Result<(), PSP34Error> {
 			let current_supply: u128 = psp34::PSP34::total_supply(self);
 			if current_supply > supply_limit {
@@ -183,6 +194,11 @@ pub mod dropspace_sale {
         pub fn sale_time(&self) -> u64 {
             self.sale_time
         }
+
+		#[ink(message)]
+		pub fn sale_active(&self) -> bool {
+			self.sale_time <= self.env().block_timestamp()
+		}
     }
 }
 
@@ -292,5 +308,69 @@ mod tests {
         assert_eq!(contract.reserve(5), Ok(()));
         assert_eq!(contract.set_supply_limit(1), Err(PSP34Error::Custom(String::from("DropspaceSale::set_total_supply: Supply limit is lesser than current supply"))));
     }
+
+	#[ink::test]
+	fn sale_active_works() {
+		let accounts = default_accounts();
+		let mut contract = Contract::new(
+			"Test".to_string(),
+			"TST".to_string(),
+			"https://example.com/token/".to_string(),
+			10,
+			1000,
+			10,
+			100000,
+			accounts.alice,
+			12345678, // set future sale time for testing
+		);
+
+		// Before the sale time, sale should not be active
+		assert_eq!(contract.sale_active(), false);
+
+		// Set the block timestamp to simulate sale time passing
+		ink::env::test::set_block_timestamp::<ink::env::DefaultEnvironment>(12345679);
+
+		// After the sale time, sale should be active
+		assert_eq!(contract.sale_active(), true);
+	}
+
+	#[ink::test]
+	fn toggle_sale_active_works() {
+		let accounts = default_accounts();
+		let mut contract = Contract::new(
+			"Test".to_string(),
+			"TST".to_string(),
+			"https://example.com/token/".to_string(),
+			10,
+			1000,
+			10,
+			100000,
+			accounts.alice,
+			1234567890, // set future sale time for testing
+		);
+
+		// Ensure that only the owner can toggle sale active
+		ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.bob);
+		assert_eq!(
+			contract.toggle_sale_active(),
+			Err(PSP34Error::Custom(String::from("O::CallerIsNotOwner")))
+		);
+
+		// Simulate the owner calling the function
+		ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
+
+		// Initially, the sale should not be active
+		assert_eq!(contract.sale_active(), false);
+
+		// Toggle sale active, which should set the sale time to 0
+		assert_eq!(contract.toggle_sale_active(), Ok(()));
+		assert_eq!(contract.sale_time(), 0);
+		assert_eq!(contract.sale_active(), true);
+
+		// Toggle sale active again, which should set the sale time to u64::MAX
+		assert_eq!(contract.toggle_sale_active(), Ok(()));
+		assert_eq!(contract.sale_time(), u64::MAX);
+		assert_eq!(contract.sale_active(), false);
+	}
 }
 
