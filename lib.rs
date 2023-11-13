@@ -106,7 +106,13 @@ pub mod dropspace_sale {
 				self.mint_token();
 			}
 
-			Ok(())
+			match self.dev_wallet {
+				Some(dev_wallet) => {
+					self.env().transfer(dev_wallet, amount.saturating_mul(self.mint_fee))
+						.map_err(|_| PSP34Error::Custom(String::from("Transfer to dev wallet failed")))
+				},
+				None => Err(PSP34Error::Custom(String::from("Developer wallet not set")))
+			}
 		}
 
 		#[ink(message)]
@@ -176,6 +182,11 @@ pub mod dropspace_sale {
         }
 
 		#[ink(message)]
+        pub fn get_account_balance(&self) -> u128 {
+            self.env().balance()
+        }
+
+		#[ink(message)]
         pub fn mint_price(&self) -> u128 {
             self.mint_price
         }
@@ -205,7 +216,7 @@ pub mod dropspace_sale {
 		pub fn withdraw(&mut self) -> Result<(), PSP34Error> {
 			let owner_option = ownable::Ownable::owner(self);
 			let owner = owner_option.ok_or(PSP34Error::Custom(String::from("Owner not found")))?;
-			let contract_balance = self.env().balance();
+			let contract_balance = self.get_account_balance();
 
 			if contract_balance > 0 {
 				match self.env().transfer(owner, contract_balance) {
@@ -223,6 +234,7 @@ pub mod dropspace_sale {
 mod tests {
     use super::*;
 	use dropspace_sale::Contract as Contract;
+	use ink::env::DefaultEnvironment as Environment;
     use openbrush::{
 		traits::Storage, 
 		contracts::psp34::{PSP34Error, psp34}, 
@@ -287,16 +299,16 @@ mod tests {
 			1000,
 			10,
 			100000,
-			accounts.alice,
+			accounts.charlie,
 			0, // set sale time to 0 for testing
 		);
 	
 		ink::env::test::set_account_balance::<ink::env::DefaultEnvironment>(accounts.bob, 100_000_000);
-		ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.bob); // Setting the caller for the next contract call
-		ink::env::test::set_value_transferred::<ink::env::DefaultEnvironment>(5_050); // Simulating value transferred for the next call
-	
-		assert_eq!(contract.buy(5), Ok(()));
+		ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.bob); // Setting the caller for the next contract call		
+		
+		assert_eq!(ink::env::pay_with_call!(contract.buy(5), 5_050), Ok(()));
 		assert_eq!(psp34::PSP34::total_supply(&contract), 5);
+		assert_eq!(contract.get_account_balance(), 100_5_000);
 		assert_eq!(contract.buy(100001), Err(PSP34Error::Custom(String::from("DropspaceSale::buy: Supply limit reached"))));
 		assert_eq!(contract.buy(15), Err(PSP34Error::Custom(String::from("DropspaceSale::buy: Can't exceed amount of mints per tx"))));
 		assert_eq!(contract.buy(4), Err(PSP34Error::Custom(String::from("DropspaceSale::buy: Wrong amount paid."))));
@@ -388,6 +400,45 @@ mod tests {
 		assert_eq!(contract.toggle_sale_active(), Ok(()));
 		assert_eq!(contract.sale_time(), u64::MAX);
 		assert_eq!(contract.sale_active(), false);
+	}
+
+	#[ink::test]
+	fn withdraw_works() {
+		let accounts = default_accounts();
+		let mut contract = Contract::new(
+			"Test".to_string(),
+			"TST".to_string(),
+			"https://example.com/token/".to_string(),
+			10, // Assuming the price per token is 10
+			1000,
+			10,
+			100000,
+			accounts.charlie,
+			0, // set sale time to 0 for testing
+		);
+
+
+		// Simulate buying a token
+		ink::env::test::set_account_balance::<ink::env::DefaultEnvironment>(accounts.alice, 0);
+		ink::env::test::set_account_balance::<ink::env::DefaultEnvironment>(accounts.charlie, 0);
+		ink::env::test::set_account_balance::<ink::env::DefaultEnvironment>(accounts.bob, 100_000_000);
+		
+		ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.bob); // Setting the caller for the next contract call
+		// Simulating value transferred for the next call - 10 tokens * 10 units each
+		assert_eq!(ink::env::pay_with_call!(contract.buy(10), 10_100), Ok(()));
+		assert_eq!(contract.get_account_balance(), 10_000);
+		
+		// Check that owner's balance has increased by 10000 units
+		let dev_balance = ink::env::test::get_account_balance::<ink::env::DefaultEnvironment>(accounts.charlie).unwrap_or_default();
+		assert_eq!(dev_balance, 100);
+
+		// Simulate the owner calling the withdraw function
+		ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
+		assert_eq!(contract.withdraw(), Ok(()));
+
+		let owner_balance = ink::env::test::get_account_balance::<ink::env::DefaultEnvironment>(accounts.alice).unwrap_or_default();
+		assert_eq!(owner_balance, 10000);
+		assert_eq!(contract.get_account_balance(), 0);
 	}
 }
 
