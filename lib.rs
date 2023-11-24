@@ -214,12 +214,10 @@ pub mod dropspace_sale {
 		#[ink(message)]
 		#[modifiers(only_owner)]
 		pub fn withdraw(&mut self) -> Result<(), PSP34Error> {
-			let owner_option = ownable::Ownable::owner(self);
-			let owner = owner_option.ok_or(PSP34Error::Custom(String::from("Owner not found")))?;
 			let contract_balance = self.get_account_balance();
 
 			if contract_balance > 0 {
-				match self.env().transfer(owner, contract_balance) {
+				match self.env().transfer(Self::env().caller(), contract_balance) {
 					Ok(_) => Ok(()),
 					Err(_) => Err(PSP34Error::Custom(String::from("Withdrawal failed"))),
 				}
