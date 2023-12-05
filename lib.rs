@@ -27,6 +27,7 @@ pub mod dropspace_sale {
 		mint_per_tx: u128,
 		mint_price: u128,
 		mint_fee: u128,
+		withdraw_wallet: Option<Address>,
 		dev_wallet: Option<Address>,
 		sale_time: u64
     }
@@ -41,6 +42,7 @@ pub mod dropspace_sale {
 			mint_price: u128,
 			mint_fee: u128,
 			supply_limit: u128,
+			withdraw_wallet: Address,
 			dev_wallet: Address,
 			sale_time: u64
 		) -> Self {
@@ -50,6 +52,7 @@ pub mod dropspace_sale {
 				mint_per_tx: mint_per_tx,
 				mint_price: mint_price,
 				mint_fee: mint_fee,
+				withdraw_wallet: Some(withdraw_wallet),
 				dev_wallet: Some(dev_wallet),
 				sale_time: sale_time,
 				..Default::default() 
@@ -98,7 +101,7 @@ pub mod dropspace_sale {
 				return Err(PSP34Error::Custom(String::from("DropspaceSale::buy: Can't exceed amount of mints per tx")));
 			}
 
-			if self.env().transferred_value() != total_price {
+			if self.env().transferred_value() <= total_price {
 				return Err(PSP34Error::Custom(String::from("DropspaceSale::buy: Wrong amount paid.")));
 			}
 			
@@ -106,13 +109,21 @@ pub mod dropspace_sale {
 				self.mint_token();
 			}
 
-			match self.dev_wallet {
-				Some(dev_wallet) => {
-					self.env().transfer(dev_wallet, amount.saturating_mul(self.mint_fee))
-						.map_err(|_| PSP34Error::Custom(String::from("Transfer to dev wallet failed")))
-				},
-				None => Err(PSP34Error::Custom(String::from("Developer wallet not set")))
+			if let Some(dev_wallet) = self.dev_wallet {
+				self.env().transfer(dev_wallet, amount.saturating_mul(self.mint_fee))
+					.map_err(|_| PSP34Error::Custom(String::from("Transfer to dev wallet failed")))?;
+			} else {
+				return Err(PSP34Error::Custom(String::from("Developer wallet not set")));
 			}
+		
+			if let Some(withdraw_wallet) = self.withdraw_wallet {
+				self.env().transfer(withdraw_wallet, amount.saturating_mul(self.mint_price))
+					.map_err(|_| PSP34Error::Custom(String::from("Transfer to owner wallet failed")))?;
+			} else {
+				return Err(PSP34Error::Custom(String::from("Owner wallet not set")));
+			}
+		
+			Ok(())
 		}
 
 		#[ink(message)]
@@ -166,6 +177,13 @@ pub mod dropspace_sale {
 		}
 
 		#[ink(message)]
+		#[modifiers(only_owner)]
+		pub fn set_withdraw_wallet(&mut self, withdraw_wallet: Option<Address>) -> Result<(), PSP34Error> {
+			self.withdraw_wallet = withdraw_wallet;
+			Ok(())
+		}
+
+		#[ink(message)]
 		pub fn token_uri(&self, token_id: u128) -> Result<PreludeString, PSP34Error> {
 			let base_uri = self.base_uri.clone();
 			Ok((format!("{base_uri}{token_id}")))
@@ -199,6 +217,11 @@ pub mod dropspace_sale {
 		#[ink(message)]
         pub fn dev_wallet(&self) -> Option<Address> {
             self.dev_wallet
+        }
+
+		#[ink(message)]
+        pub fn withdraw_wallet(&self) -> Option<Address> {
+            self.withdraw_wallet
         }
 
 		#[ink(message)]
@@ -255,6 +278,7 @@ mod tests {
             1000,
             10,
             100000,
+			accounts.django,
             accounts.alice,
             12345678,
         );
@@ -277,6 +301,7 @@ mod tests {
             1000,
             10,
             100000,
+			accounts.django,
             accounts.alice,
             12345678,
         );
@@ -297,6 +322,7 @@ mod tests {
 			1000,
 			10,
 			100000,
+			accounts.django,
 			accounts.charlie,
 			0, // set sale time to 0 for testing
 		);
@@ -306,7 +332,7 @@ mod tests {
 		
 		assert_eq!(ink::env::pay_with_call!(contract.buy(5), 5_050), Ok(()));
 		assert_eq!(psp34::PSP34::total_supply(&contract), 5);
-		assert_eq!(contract.get_account_balance(), 100_5_000);
+		assert_eq!(contract.get_account_balance(), 100_0_000);
 		assert_eq!(contract.buy(100001), Err(PSP34Error::Custom(String::from("DropspaceSale::buy: Supply limit reached"))));
 		assert_eq!(contract.buy(15), Err(PSP34Error::Custom(String::from("DropspaceSale::buy: Can't exceed amount of mints per tx"))));
 		assert_eq!(contract.buy(4), Err(PSP34Error::Custom(String::from("DropspaceSale::buy: Wrong amount paid."))));
@@ -323,6 +349,7 @@ mod tests {
             1000,
             10,
             100000,
+			accounts.django,
             accounts.alice,
             12345678,
         );
@@ -347,6 +374,7 @@ mod tests {
 			1000,
 			10,
 			100000,
+			accounts.django,
 			accounts.alice,
 			12345678, // set future sale time for testing
 		);
@@ -372,6 +400,7 @@ mod tests {
 			1000,
 			10,
 			100000,
+			accounts.django,
 			accounts.alice,
 			1234567890, // set future sale time for testing
 		);
@@ -411,6 +440,7 @@ mod tests {
 			1000,
 			10,
 			100000,
+			accounts.django,
 			accounts.charlie,
 			0, // set sale time to 0 for testing
 		);
@@ -424,7 +454,7 @@ mod tests {
 		ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.bob); // Setting the caller for the next contract call
 		// Simulating value transferred for the next call - 10 tokens * 10 units each
 		assert_eq!(ink::env::pay_with_call!(contract.buy(10), 10_100), Ok(()));
-		assert_eq!(contract.get_account_balance(), 10_000);
+		assert_eq!(contract.get_account_balance(), 0);
 		
 		// Check that owner's balance has increased by 10000 units
 		let dev_balance = ink::env::test::get_account_balance::<ink::env::DefaultEnvironment>(accounts.charlie).unwrap_or_default();
