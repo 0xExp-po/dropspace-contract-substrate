@@ -71,7 +71,7 @@ pub mod dropspace_sale {
                 String::from("symbol"),
                 String::from(symbol),
             );
-			_instance
+            _instance
         }
 
         fn mint_token(&mut self) -> Result<(), PSP34Error> {
@@ -129,9 +129,7 @@ pub mod dropspace_sale {
                 let __ = self.mint_token();
             }
 
-			ink::env::debug_println!("\n Dev fee Total: {:?}\n", amount.saturating_mul(self.mint_fee));
-
-			if let Some(withdraw_wallet) = self.withdraw_wallet {
+            if let Some(withdraw_wallet) = self.withdraw_wallet {
                 self.env()
                     .transfer(withdraw_wallet, amount.saturating_mul(self.mint_price))
                     .map_err(|_| {
@@ -142,11 +140,13 @@ pub mod dropspace_sale {
             }
 
             if let Some(dev_wallet) = self.dev_wallet {
-                self.env()
-                    .transfer(dev_wallet, amount.saturating_mul(self.mint_fee))
-                    .map_err(|_| {
-                        PSP34Error::Custom(String::from("Transfer to dev wallet failed"))
-                    })?;
+                if amount.saturating_mul(self.mint_fee) > 0 {
+                    self.env()
+                        .transfer(dev_wallet, amount.saturating_mul(self.mint_fee))
+                        .map_err(|_| {
+                            PSP34Error::Custom(String::from("Transfer to dev wallet failed"))
+                        })?;
+                }
             } else {
                 return Err(PSP34Error::Custom(String::from("Developer wallet not set")));
             }
@@ -267,12 +267,12 @@ pub mod dropspace_sale {
             self.sale_time <= self.env().block_timestamp()
         }
 
-		#[ink(message)]
+        #[ink(message)]
         pub fn base_uri(&self) -> PreludeString {
             self.base_uri.clone()
         }
 
-		#[ink(message)]
+        #[ink(message)]
         #[modifiers(only_owner)]
         pub fn withdraw(&mut self) -> Result<(), PSP34Error> {
             let contract_balance = self.get_account_balance();
@@ -291,50 +291,50 @@ pub mod dropspace_sale {
 
 #[cfg(test)]
 mod tests {
-	#[rustfmt::skip]
+    #[rustfmt::skip]
     use super::*;
     use dropspace_sale::Contract;
     use ink::{env::DefaultEnvironment as Environment, primitives::AccountId};
-    use openbrush::contracts::psp34::{psp34, PSP34Error, Id};
-	use openbrush::contracts::psp34::extensions::metadata::psp34metadata_external::PSP34Metadata;
-	use openbrush::contracts::ownable::Ownable;
-	
+    use openbrush::contracts::ownable::Ownable;
+    use openbrush::contracts::psp34::extensions::metadata::psp34metadata_external::PSP34Metadata;
+    use openbrush::contracts::psp34::{psp34, Id, PSP34Error};
+
     fn default_accounts() -> ink::env::test::DefaultAccounts<ink::env::DefaultEnvironment> {
         ink::env::test::default_accounts::<ink::env::DefaultEnvironment>()
     }
 
     struct ContractParam {
-		name: String,
+        name: String,
         symbol: String,
-		base_uri: String,
+        base_uri: String,
         supply_limit: u128,
         mint_per_tx: u128,
         mint_price: u128,
         mint_fee: u128,
         withdraw_wallet: Option<AccountId>,
-		dev_wallet: Option<AccountId>,
-		sale_time: u64,
+        dev_wallet: Option<AccountId>,
+        sale_time: u64,
     }
 
-	impl Default for ContractParam {
-		fn default() -> ContractParam {
-			ContractParam {
-				name:"Test".to_string(),
-				symbol: "TST".to_string(),
-				base_uri:  "https://example.com/token/".to_string(),
-				supply_limit: 100000,
-				mint_per_tx: 10,
-				mint_price: 1000,
-				mint_fee: 10,
-				withdraw_wallet: None,
-				dev_wallet: None,
-				sale_time: 0,
-			}
-		}
-	}
+    impl Default for ContractParam {
+        fn default() -> ContractParam {
+            ContractParam {
+                name: "Test".to_string(),
+                symbol: "TST".to_string(),
+                base_uri: "https://example.com/token/".to_string(),
+                supply_limit: 100000,
+                mint_per_tx: 10,
+                mint_price: 1000,
+                mint_fee: 10,
+                withdraw_wallet: None,
+                dev_wallet: None,
+                sale_time: 0,
+            }
+        }
+    }
 
-	fn get_contract(args: &ContractParam) -> Contract {
-		return Contract::new(
+    fn get_contract(args: &ContractParam) -> Contract {
+        return Contract::new(
             args.name.to_string(),
             args.symbol.to_string(),
             args.base_uri.to_string(),
@@ -352,14 +352,14 @@ mod tests {
     fn new_works() {
         let accounts = default_accounts();
 
-		let params = ContractParam {
-			withdraw_wallet: Some(accounts.django),
-			dev_wallet: Some(accounts.alice),
-			..Default::default()
-		};
-		let contract = get_contract(&params);
+        let params = ContractParam {
+            withdraw_wallet: Some(accounts.django),
+            dev_wallet: Some(accounts.alice),
+            ..Default::default()
+        };
+        let contract = get_contract(&params);
 
-		assert_eq!(contract.supply_limit(), params.supply_limit);
+        assert_eq!(contract.supply_limit(), params.supply_limit);
         assert_eq!(contract.mint_per_tx(), params.mint_per_tx);
         assert_eq!(contract.mint_price(), params.mint_price);
         assert_eq!(contract.mint_fee(), params.mint_fee);
@@ -367,14 +367,19 @@ mod tests {
         assert_eq!(contract.withdraw_wallet(), params.withdraw_wallet);
         assert_eq!(contract.sale_time(), params.sale_time);
         assert_eq!(contract.sale_active(), true);
-		
-		let id = psp34::PSP34::collection_id(&contract);
-        assert_eq!(PSP34Metadata::get_attribute(&contract, id.clone(), String::from("name")), Some(params.name));
-		assert_eq!(PSP34Metadata::get_attribute(&contract, id.clone(), String::from("symbol")), Some(params.symbol));
-		assert_eq!(contract.base_uri(), params.base_uri);
 
+        let id = psp34::PSP34::collection_id(&contract);
+        assert_eq!(
+            PSP34Metadata::get_attribute(&contract, id.clone(), String::from("name")),
+            Some(params.name)
+        );
+        assert_eq!(
+            PSP34Metadata::get_attribute(&contract, id.clone(), String::from("symbol")),
+            Some(params.symbol)
+        );
+        assert_eq!(contract.base_uri(), params.base_uri);
     }
-	
+
     #[ink::test]
     fn reserve_works() {
         let accounts = default_accounts();
@@ -405,29 +410,22 @@ mod tests {
     fn buy_works() {
         let accounts = default_accounts();
 
-		// Set owner
-		ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.charlie);
+        // Set owner
+        ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.charlie);
 
-		let params = ContractParam {
-			withdraw_wallet: Some(accounts.django),
-			dev_wallet: Some(accounts.eve),
-			..Default::default()
-		};
-		let mut contract = get_contract(&params);
-		assert_eq!(contract.get_account_balance(), 1000000);
-		
-		// current owner checking
-		assert_eq!(Ownable::owner(&contract), Some(accounts.charlie));
+        let params = ContractParam {
+            withdraw_wallet: Some(accounts.django),
+            dev_wallet: Some(accounts.eve),
+            ..Default::default()
+        };
+        let mut contract = get_contract(&params);
+        assert_eq!(contract.get_account_balance(), 1000000);
 
-		
-		ink::env::debug_println!(
-            " Dev Fee={:?}",
-            contract.mint_fee()
-        );
-		ink::env::debug_println!(
-            " Contract balance={:?}\n",
-            contract.get_account_balance()
-        );
+        // current owner checking
+        assert_eq!(Ownable::owner(&contract), Some(accounts.charlie));
+
+        ink::env::debug_println!(" Dev Fee={:?}", contract.mint_fee());
+        ink::env::debug_println!(" Contract balance={:?}\n", contract.get_account_balance());
 
         ink::env::test::set_account_balance::<ink::env::DefaultEnvironment>(
             accounts.bob,
@@ -435,66 +433,79 @@ mod tests {
         );
         ink::env::test::set_account_balance::<ink::env::DefaultEnvironment>(accounts.django, 0);
         ink::env::test::set_account_balance::<ink::env::DefaultEnvironment>(accounts.eve, 0);
-		ink::env::debug_println!(
+        ink::env::debug_println!(
             " Withdraw Wallet (django) bal={:?}",
             ink::env::test::get_account_balance::<ink::env::DefaultEnvironment>(accounts.django)
         );
-		ink::env::debug_println!(
+        ink::env::debug_println!(
             " Dev Wallet (eve) bal={:?}",
             ink::env::test::get_account_balance::<ink::env::DefaultEnvironment>(accounts.eve)
         );
 
-		let qty = 7;
-		let required_value = qty * (params.mint_price + params.mint_fee);
+        let qty = 7;
+        let required_value = qty * (params.mint_price + params.mint_fee);
 
-		// Setting the caller for the next contract call
+        // Setting the caller for the next contract call
         ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.bob);
 
-        assert_eq!(ink::env::pay_with_call!(contract.buy(qty), required_value), Ok(()));
-		
-		assert_eq!(psp34::PSP34::total_supply(&contract), qty);
-		
-		assert_eq!(psp34::PSP34::owner_of(&contract, Id::U128(1)), Some(accounts.bob));
-		assert_eq!(psp34::PSP34::owner_of(&contract, Id::U128(qty)), None);			// invalid token's ownership test
-		
+        assert_eq!(
+            ink::env::pay_with_call!(contract.buy(qty), required_value),
+            Ok(())
+        );
 
-		// Checking splitted balances
-		ink::env::debug_println!(
+        assert_eq!(psp34::PSP34::total_supply(&contract), qty);
+
+        assert_eq!(
+            psp34::PSP34::owner_of(&contract, Id::U128(1)),
+            Some(accounts.bob)
+        );
+        assert_eq!(psp34::PSP34::owner_of(&contract, Id::U128(qty)), None); // invalid token's ownership test
+
+        // Checking splitted balances
+        ink::env::debug_println!(
             "\n Withdraw Wallet (django) bal={:?}",
             ink::env::test::get_account_balance::<ink::env::DefaultEnvironment>(accounts.django)
         );
-		ink::env::debug_println!(
+        ink::env::debug_println!(
             " Dev Wallet (chalie) bal={:?}",
             ink::env::test::get_account_balance::<ink::env::DefaultEnvironment>(accounts.eve)
         );
-		ink::env::debug_println!(
+        ink::env::debug_println!(
             " User Wallet (bob) bal={:?}",
             ink::env::test::get_account_balance::<ink::env::DefaultEnvironment>(accounts.bob)
         );
-        assert_eq!(ink::env::test::get_account_balance::<ink::env::DefaultEnvironment>(accounts.bob), Ok(100_000_000 - required_value));
-        assert_eq!(ink::env::test::get_account_balance::<ink::env::DefaultEnvironment>(accounts.django), Ok(qty * params.mint_price));
-
-		let __dev_bal: Result<u128, ink::env::Error> = ink::env::test::get_account_balance::<ink::env::DefaultEnvironment>(accounts.eve);
-		assert_eq!(__dev_bal, Ok(qty * params.mint_fee));
-		ink::env::debug_println!(
-            " Dev Wallet (eve) bal={:?}",
-            __dev_bal
+        assert_eq!(
+            ink::env::test::get_account_balance::<ink::env::DefaultEnvironment>(accounts.bob),
+            Ok(100_000_000 - required_value)
         );
-		ink::env::debug_println!(
-            " Contract balance={:?}\n",
-            contract.get_account_balance()
+        assert_eq!(
+            ink::env::test::get_account_balance::<ink::env::DefaultEnvironment>(accounts.django),
+            Ok(qty * params.mint_price)
         );
 
+        let __dev_bal: Result<u128, ink::env::Error> =
+            ink::env::test::get_account_balance::<ink::env::DefaultEnvironment>(accounts.eve);
+        assert_eq!(__dev_bal, Ok(qty * params.mint_fee));
+        ink::env::debug_println!(" Dev Wallet (eve) bal={:?}", __dev_bal);
+        ink::env::debug_println!(" Contract balance={:?}\n", contract.get_account_balance());
 
-		// Transfer test
-		assert_eq!(psp34::PSP34::owner_of(&contract, Id::U128(0)), Some(accounts.bob));
-		
-		assert_eq!(psp34::PSP34::transfer(&mut contract, accounts.frank, Id::U128(0), Vec::new()), Ok(()));
-		
-		assert_eq!(psp34::PSP34::owner_of(&contract, Id::U128(0)), Some(accounts.frank));
+        // Transfer test
+        assert_eq!(
+            psp34::PSP34::owner_of(&contract, Id::U128(0)),
+            Some(accounts.bob)
+        );
 
-		
-		// Invalid Buy
+        assert_eq!(
+            psp34::PSP34::transfer(&mut contract, accounts.frank, Id::U128(0), Vec::new()),
+            Ok(())
+        );
+
+        assert_eq!(
+            psp34::PSP34::owner_of(&contract, Id::U128(0)),
+            Some(accounts.frank)
+        );
+
+        // Invalid Buy
         assert_eq!(
             contract.buy(100001),
             Err(PSP34Error::Custom(String::from(
@@ -508,26 +519,54 @@ mod tests {
             )))
         );
         assert_eq!(
-            ink::env::pay_with_call!(contract.buy(4), 4 * (params.mint_fee + params.mint_price) - 1),
+            ink::env::pay_with_call!(
+                contract.buy(4),
+                4 * (params.mint_fee + params.mint_price) - 1
+            ),
             Err(PSP34Error::Custom(String::from(
                 "DropspaceSale::buy: Wrong amount paid."
             )))
         );
     }
 
+
+    #[ink::test]
+    fn buy2_works() {
+        let accounts = default_accounts();
+
+        // Set owner
+        ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.charlie);
+
+        let params = ContractParam {
+            mint_fee: 0,
+            withdraw_wallet: Some(accounts.django),
+            dev_wallet: Some(accounts.eve),
+            ..Default::default()
+        };
+        let mut contract = get_contract(&params);
+
+        ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.bob);
+        assert_eq!(
+            ink::env::pay_with_call!(contract.buy(1), params.mint_price),
+            Ok(())
+        );
+
+        assert_eq!(psp34::PSP34::total_supply(&contract), 1);
+    }
+
     #[ink::test]
     fn setters_work() {
         let accounts = default_accounts();
-		
-		// Set owner
-		ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.charlie);
+
+        // Set owner
+        ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.charlie);
 
         let params = ContractParam {
-			withdraw_wallet: Some(accounts.django),
-			dev_wallet: Some(accounts.alice),
-			..Default::default()
-		};
-		let mut contract = get_contract(&params);
+            withdraw_wallet: Some(accounts.django),
+            dev_wallet: Some(accounts.alice),
+            ..Default::default()
+        };
+        let mut contract = get_contract(&params);
 
         assert_eq!(
             contract.set_base_uri("https://newuri.com/token/".to_string()),
@@ -548,24 +587,24 @@ mod tests {
 
     #[ink::test]
     fn sale_active_works() {
-		let accounts = default_accounts();
+        let accounts = default_accounts();
         let params = ContractParam {
-			withdraw_wallet: Some(accounts.django),
-			dev_wallet: Some(accounts.alice),
-			..Default::default()
-		};
-		let mut contract = get_contract(&params);
-		
-		// Set the block timestamp to simulate sale time passing
+            withdraw_wallet: Some(accounts.django),
+            dev_wallet: Some(accounts.alice),
+            ..Default::default()
+        };
+        let mut contract = get_contract(&params);
+
+        // Set the block timestamp to simulate sale time passing
         ink::env::test::set_block_timestamp::<ink::env::DefaultEnvironment>(12345678);
         assert_eq!(contract.sale_active(), true);
 
-		let __= contract.set_sale_time(12345679);
+        let __ = contract.set_sale_time(12345679);
 
         // After the sale time, sale should be active
         assert_eq!(contract.sale_active(), false);
-		
-		let __= contract.set_sale_time(0);
+
+        let __ = contract.set_sale_time(0);
         assert_eq!(contract.sale_active(), true);
     }
 
@@ -573,15 +612,15 @@ mod tests {
     fn toggle_sale_active_works() {
         let accounts = default_accounts();
         let params = ContractParam {
-			withdraw_wallet: Some(accounts.django),
-			dev_wallet: Some(accounts.alice),
-			..Default::default()
-		};
+            withdraw_wallet: Some(accounts.django),
+            dev_wallet: Some(accounts.alice),
+            ..Default::default()
+        };
 
-		// Set owner
-		ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.charlie);
-        
-		let mut contract = get_contract(&params);
+        // Set owner
+        ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.charlie);
+
+        let mut contract = get_contract(&params);
 
         // Ensure that only the owner can toggle sale active
         ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.bob);
@@ -590,16 +629,12 @@ mod tests {
             Err(PSP34Error::Custom(String::from("O::CallerIsNotOwner")))
         );
 
-		assert_eq!(contract.sale_active(), true);
-		ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.charlie);
-        assert_eq!(
-            contract.toggle_sale_active(),
-            Ok(())
-        );
-		assert_eq!(contract.sale_active(), false);
+        assert_eq!(contract.sale_active(), true);
+        ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.charlie);
+        assert_eq!(contract.toggle_sale_active(), Ok(()));
+        assert_eq!(contract.sale_active(), false);
 
-
-		// Simulate the owner calling the function
+        // Simulate the owner calling the function
         ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.charlie);
 
         // Toggle sale active, which should set the sale time to 0
