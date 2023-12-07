@@ -293,7 +293,7 @@ mod tests {
     use super::*;
     use dropspace_sale::Contract;
     use ink::{env::DefaultEnvironment as Environment, primitives::AccountId};
-    use openbrush::contracts::psp34::{psp34, PSP34Error, Data};
+    use openbrush::contracts::psp34::{psp34, PSP34Error};
 	use openbrush::contracts::psp34::extensions::metadata::psp34metadata_external::PSP34Metadata;
 	
     fn default_accounts() -> ink::env::test::DefaultAccounts<ink::env::DefaultEnvironment> {
