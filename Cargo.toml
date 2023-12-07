@@ -14,6 +14,7 @@ scale-info = { version = "2.6", default-features = false, features = ["derive"],
 # Include brush as a dependency and enable default implementation for PSP22 via brush feature
 openbrush = { tag = "4.0.0-beta", git = "https://github.com/Brushfam/openbrush-contracts", default-features = false, features = ["psp34", "ownable"] }
 
+sp-core = "26.0.0"
 
 [lib]
 name = "dropspace_sale"
@@ -26,7 +27,6 @@ std = [
     "ink/std",
     "scale/std",
     "scale-info/std",
-
     "openbrush/std",
 ]
 ink-as-dependency = [] 
